@@ -1,0 +1,48 @@
+---
+config:
+  layout: elk
+  theme: mc
+  look: neo
+---
+flowchart TB
+ subgraph subGraph0["<h4><strong>Phase 1: Reverse Engineering & Analysis (Offline)</strong></h4>"]
+        MobileApp["Target App<br>Android APK / iOS IPA"]
+        Decompiler["Static Analysis<br><strong>JADX / Ghidra</strong>"]
+        FridaServer["Frida Server<br>on Rooted Device"]
+        BurpSuite["Traffic Proxy<br><strong>Burp Suite</strong>"]
+        Reverser["Analysis for Portal Database<br>(Methods, Request Headers, Target Hooks)"]
+  end
+ subgraph subGraph1["<h4><strong>Phase 2: rev_eng_api FastAPI Portal</strong></h4>"]
+        User["User / External System"]
+        FastAPI["FastAPI Web Portal"]
+        Redis[("Redis Message Broker / DB")]
+        CeleryWorker["Background Worker<br>Celery / BackgroundTasks"]
+        SessionMgr["Session & Rate Limit Manager"]
+        BypassModule["Security Bypass Engine<br>Mimic HTTPX Req"]
+        LiveFrida["Live Frida Binding<br>Dynamic Hooking Engine"]
+        TargetAPI["Target External API<br>LinkedIn, IG, OLX etc."]
+  end
+    
+    %% Phase 1 Connections (Offline)
+    MobileApp -- "1. Decompile / Disassemble" --> Decompiler
+    Decompiler -- "2. Identify Target Classes & Crypto Methods" --> FridaServer
+    MobileApp <-- "3. Dynamic Instrumentation" --> FridaServer
+    FridaServer -- "4. Inject SSL Pinning Bypass" --> MobileApp
+    MobileApp <-- "5. Intercept Proxied Traffic" --> BurpSuite
+    BurpSuite -- "6. Analyze Endpoints & Payloads" --> Reverser
+
+    %% Phase 2 Connections (API Portal)
+    User -- "POST /execute (Async)" --> FastAPI
+    User -- "GET /methods" --> FastAPI
+    FastAPI -- "Queue Task" --> Redis
+    FastAPI -. "Return Task ID" .-> User
+    Redis -- "Consume Task" --> CeleryWorker
+    CeleryWorker -- "Fetch Config/Hooks" --> SessionMgr
+    
+    %% The Conditional Hook Logic for Phase 2
+    CeleryWorker -- "Condition A: Static/Known Auth<br>Apply directly" --> BypassModule
+    CeleryWorker -- "Condition B: Dynamic Token Required<br>Spawn App Process" --> LiveFrida
+    
+    LiveFrida -- "Extract Live Signing Token / Response" --> BypassModule
+    BypassModule -- "Send Mimicked App Request" --> TargetAPI
+    TargetAPI -- "Return Original JSON" --> CeleryWorker

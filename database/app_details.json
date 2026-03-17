@@ -1,0 +1,21 @@
+{
+    "OLX": {
+        "name": "com.fixeads.olxportugal",
+        "methods": {
+            "search_ads": "https://www.olx.pt/apigateway/graphql",
+            "get_categories": "https://www.olx.pt/api/v1/offers/categories",
+            "get_locations": "https://www.olx.pt/api/v1/offers/locations",
+            "get_offers": "https://www.olx.pt/api/v1/offers",
+            "method_with_app_access": "https://www.olx.pt/api/v1/users"
+        }
+    },
+    "instagram": {
+        "name": "com.instagram.android",
+        "methods": {
+            "get_user_info": "https://www.instagram.com/{username}/?__a=1",
+            "get_user_posts": "https://www.instagram.com/{username}/?__a=1",
+            "get_user_followers": "https://www.instagram.com/{username}/?__a=1",
+            "get_user_following": "https://www.instagram.com/{username}/?__a=1"
+        }
+    }
+}

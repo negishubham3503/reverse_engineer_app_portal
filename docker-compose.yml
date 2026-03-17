@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  rev_eng_api:
+    build: .
+    container_name: rev_eng_portal_api
+    ports:
+    - "8000:8000"
+    network_mode: "host"
