@@ -4,6 +4,7 @@ from app.config.settings import settings
 from app.services.methods_service import execute_method_with_app_access, execute_olx_search, get_method_names, execute_olx_search_direct
 from app.schemas import MethodList, TaskResponse, ExecuteRequest
 from app.repositories.task_repository import update_task, get_task
+from app.util.bypass_security_controls import execute_ssl_pinning_bypass
 
 app = FastAPI(
     title="Reverse Engineering APP portal",
@@ -76,6 +77,13 @@ async def execute_method_direct(request: ExecuteRequest):
             return {"status": "error", "message": "Method or App not directly supported yet"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/execute_method_with_app_access")
+def execute_method_with_app_access_endpoint(background_tasks: BackgroundTasks):
+    task_id = str(uuid.uuid4())
+    update_task(task_id, "queued", message="Task is queued for execution")
+    background_tasks.add_task(execute_method_with_app_access, task_id)
+    return TaskResponse(task_id=task_id, status="queued", message="Task is getting executed in the background")
 
 @app.get("/")
 async def root():

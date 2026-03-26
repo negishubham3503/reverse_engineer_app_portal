@@ -3,6 +3,8 @@ import random
 import asyncio
 import subprocess
 import threading
+import shlex
+import time
 
 import frida
 
@@ -23,128 +25,45 @@ def check_cert_availability_and_push(local_cert_path, remote_cert_path):
     except subprocess.CalledProcessError as e:
         print(f"Error checking or pushing certificate: {e}")
 
+def _log_subprocess_output(proc: subprocess.Popen):
+    """Continuously reads stdout from a process in a background thread."""
+    try:
+        if proc.stdout:
+            for line in iter(proc.stdout.readline, ''):
+                if line:
+                    print(line.rstrip())
+                if proc.poll() is not None:
+                    break
+    except Exception as e:
+        print(f"Error reading process output: {e}")
+
 def execute_ssl_pinning_bypass(package_name: str) -> str:
     # currently frida can't load code from a codeshare file so we need to hardcode the script in the project
     # So in a way this below code mimics the behaviour of the below frida command
     # frida -U -f package_name -l bypass_security_controls.js
+    # updated code below. mimicing the frida cmd command as it works successfully instead of using frida library
     try:
         script_path = settings.PROJECT_ROOT / "frida-scripts" / "ssl_pinning_bypass.js"
         check_cert_availability_and_push("cert-der.crt", "/data/local/tmp/cert-der.crt")
-        device = frida.get_usb_device()
-
-        pid = device.spawn([package_name])
-        session = device.attach(pid)
-
-        with open(script_path, "r", encoding="utf-8") as f:
-            script_code = f.read()
-
-        wrapper_script = f"""
-        function wait_for_java() {{
-            if (typeof Java !== 'undefined' && Java.available) {{
-                // 1. Run the custom onResume verification hook
-                try {{
-                    Java.perform(function () {{
-                        var Activity = Java.use("android.app.Activity");
-                        Activity.onResume.implementation = function () {{
-                            send("Class 'android.app.Activity' method 'onResume()' was executed!");
-                            this.onResume(); 
-                        }};
-                        send("Activity hooks installed successfully.");
-                    }});
-                }} catch (e) {{
-                    send("Failed to install Activity hook: " + e);
-                }}
-
-                // 2. Run the original SSL Pinning script logic you downloaded from Codeshare.
-                // We inject it directly into this runtime block so we know Java is ready.
-                {{setTimeout(function(){{
-                    Java.perform(function (){{
-                        console.log("");
-                        console.log("[.] Cert Pinning Bypass/Re-Pinning");
-
-                        var CertificateFactory = Java.use("java.security.cert.CertificateFactory");
-                        var FileInputStream = Java.use("java.io.FileInputStream");
-                        var BufferedInputStream = Java.use("java.io.BufferedInputStream");
-                        var X509Certificate = Java.use("java.security.cert.X509Certificate");
-                        var KeyStore = Java.use("java.security.KeyStore");
-                        var TrustManagerFactory = Java.use("javax.net.ssl.TrustManagerFactory");
-                        var SSLContext = Java.use("javax.net.ssl.SSLContext");
-
-                        // Load CAs from an InputStream
-                        console.log("[+] Loading our CA...")
-                        var cf = CertificateFactory.getInstance("X.509");
-                        
-                        try {{
-                            var fileInputStream = FileInputStream.$new("/data/local/tmp/cert-der.crt");
-                        }}
-                        catch(err) {{
-                            console.log("[o] " + err);
-                        }}
-                        
-                        var bufferedInputStream = BufferedInputStream.$new(fileInputStream);
-                        var ca = cf.generateCertificate(bufferedInputStream);
-                        bufferedInputStream.close();
-
-                        var certInfo = Java.cast(ca, X509Certificate);
-                        console.log("[o] Our CA Info: " + certInfo.getSubjectDN());
-
-                        // Create a KeyStore containing our trusted CAs
-                        console.log("[+] Creating a KeyStore for our CA...");
-                        var keyStoreType = KeyStore.getDefaultType();
-                        var keyStore = KeyStore.getInstance(keyStoreType);
-                        keyStore.load(null, null);
-                        keyStore.setCertificateEntry("ca", ca);
-                        
-                        // Create a TrustManager that trusts the CAs in our KeyStore
-                        console.log("[+] Creating a TrustManager that trusts the CA in our KeyStore...");
-                        var tmfAlgorithm = TrustManagerFactory.getDefaultAlgorithm();
-                        var tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
-                        tmf.init(keyStore);
-                        console.log("[+] Our TrustManager is ready...");
-
-                        console.log("[+] Hijacking SSLContext methods now...")
-                        console.log("[-] Waiting for the app to invoke SSLContext.init()...")
-
-                        SSLContext.init.overload("[Ljavax.net.ssl.KeyManager;", "[Ljavax.net.ssl.TrustManager;", "java.security.SecureRandom").implementation = function(a,b,c) {{
-                            console.log("[o] App invoked javax.net.ssl.SSLContext.init...");
-                            SSLContext.init.overload("[Ljavax.net.ssl.KeyManager;", "[Ljavax.net.ssl.TrustManager;", "java.security.SecureRandom").call(this, a, tmf.getTrustManagers(), c);
-                            console.log("[+] SSLContext initialized with our custom TrustManager!");
-                        }}
-                    }});
-                }},0);}}
-
-            }} else {{
-                setTimeout(wait_for_java, 250); // Poll again in 250ms
-            }}
-        }}
-        wait_for_java();
-        """
-
-        js_ready_event = threading.Event()
-        bypass_logs = []
-
-        def on_message(message, data):
-            if message['type'] == 'send':
-                payload = message['payload']
-                print(f"[*] Frida Log: {payload}")
-                bypass_logs.append(payload)
-                
-                if "Our TrustManager is ready" in payload or "Bypass/Re-Pinning" in payload:
-                    js_ready_event.set()
-                    
-            elif message['type'] == 'error':
-                print(f"[!] Frida Error: {message['stack']}")
+        cmd = ["frida", "-U", "-f", package_name, "-l", str(script_path)]
+        print(f"[*] Running: {' '.join(cmd)}")
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1  # Line buffered
+        )
         
-        script = session.create_script(wrapper_script)
-        script.on("message", on_message)
-        script.load()
-
-        device.resume(pid)
-
-        print("[*] Waiting for SSL Pinning script to initialize...")
-        js_ready_event.wait(timeout=10.0)
-
-        return True
+        thread = threading.Thread(target=_log_subprocess_output, args=(proc,), daemon=True)
+        thread.start()
+        
+        time.sleep(3)
+        
+        if proc.poll() is not None:
+            raise RuntimeError("Frida process exited immediately. Check the script or package name.")
+            
+        return "SSL Pinning bypass successfully started."
     
     except Exception as e:
         raise RuntimeError(f"Error executing SSL pinning bypass: {e}")

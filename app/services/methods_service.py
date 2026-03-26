@@ -119,11 +119,13 @@ async def execute_olx_search_direct(search_term: str) -> dict:
         response.raise_for_status()
         return response.json()
 
-def execute_method_with_app_access():
+def execute_method_with_app_access(task_id: str):
     methods_db_data = get_methods_from_db(settings.get_methods_db_path())
     package_name = methods_db_data.get("OLX", {}).get("name")
     result = execute_ssl_pinning_bypass(package_name)
     if result == True:
+        update_task(task_id, status="completed", result={"status": "success"}, message="SSL pinning bypass executed successfully")
         return {"message": "SSL pinning bypass executed successfully"}
     else:
+        update_task(task_id, status="completed", result={"status": "failure"}, message="Failed to execute SSL pinning bypass")
         return {"message": "Failed to execute SSL pinning bypass"}

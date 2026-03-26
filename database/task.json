@@ -36121,5 +36121,27 @@
             }
         },
         "message": "Method executed successfully"
+    },
+    "4d053254-5225-45a3-9cf1-939ee4c1b7d3": {
+        "status": "queued",
+        "result": null,
+        "message": "Task is queued for execution"
+    },
+    "9c39a503-b401-4c5c-b712-328300bc4506": {
+        "status": "completed",
+        "result": "failure",
+        "message": "Failed to execute SSL pinning bypass"
+    },
+    "e518a0e5-9189-47a1-acf7-6ae1f3afd776": {
+        "status": "completed",
+        "result": "failure",
+        "message": "Failed to execute SSL pinning bypass"
+    },
+    "5bd1cf05-e59d-431d-aabc-95f03ca66491": {
+        "status": "completed",
+        "result": {
+            "status": "failure"
+        },
+        "message": "Failed to execute SSL pinning bypass"
     }
 }
